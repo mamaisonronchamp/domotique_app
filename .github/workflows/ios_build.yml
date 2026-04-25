@@ -1,32 +1,31 @@
-name: Build iOS IPA
+name: domotique_app
+description: Application domotique ESP32
+publish_to: 'none'
 
-on:
-  push:
-    branches:
-      - main
+version: 1.0.0+1
 
-jobs:
-  build-ios:
-    runs-on: macos-latest
+environment:
+  sdk: ">=3.5.0 <4.0.0"
 
-    steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v3
+dependencies:
+  flutter:
+    sdk: flutter
 
-      - name: ⚙️ Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.22.0'
-          channel: 'stable'
+  http: ^1.2.0
+  flutter_secure_storage: ^9.2.2
 
-      - name: 📦 Install dependencies
-        run: flutter pub get
+  cupertino_icons: ^1.0.6
 
-      - name: 🛠 Build iOS (no signing)
-        run: flutter build ios --release --no-codesign
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
 
-      - name: 📤 Upload build
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-build
-          path: build/ios/iphoneos
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/icons/portail.png
+    - assets/icons/portillon.png
+    - assets/icons/garage.png
