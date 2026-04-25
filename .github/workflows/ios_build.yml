@@ -1,4 +1,4 @@
-name: Build iOS
+name: Build iOS IPA
 
 on:
   push:
@@ -10,22 +10,22 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: 📥 Checkout
+        uses: actions/checkout@v3
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - name: 🧰 Setup Flutter
+        uses: flutter-actions/setup-flutter@v3
         with:
-          flutter-version: 'stable'
+          flutter-version: 3.19.0
 
-      - name: Install dependencies
+      - name: 📦 Install dependencies
         run: flutter pub get
 
-      - name: Build iOS (no signing)
+      - name: 🔨 Build iOS (no signing)
         run: flutter build ios --release --no-codesign
 
-      - name: Upload build
+      - name: 📤 Upload build
         uses: actions/upload-artifact@v4
         with:
           name: ios-build
-          path: build/ios/iphoneos
+          path: build/ios/iphoneos/Runner.app
