@@ -1,0 +1,9 @@
+IP Publique: http://77.130.175.34:7941
+
+IP ESP32: 192.168.1.50:80
+
+Nom de domaine:
+Service: no-ip.com
+Nom d'utilisateur: ba.lacroix@laposte.net
+Mot de passe: Noip70250*
+Nom de domaine: mamaisonronchamp.ddns.net

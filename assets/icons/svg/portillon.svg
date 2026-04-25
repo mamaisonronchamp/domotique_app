@@ -1,0 +1,9 @@
+<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+  <path d="M20 70 L20 40 Q50 10 80 40 L80 70 Z"/>
+  <line x1="30" y1="40" x2="30" y2="70"/>
+  <line x1="40" y1="35" x2="40" y2="70"/>
+  <line x1="50" y1="30" x2="50" y2="70"/>
+  <line x1="60" y1="35" x2="60" y2="70"/>
+  <line x1="70" y1="40" x2="70" y2="70"/>
+  <circle cx="75" cy="55" r="2"/>
+</svg>
