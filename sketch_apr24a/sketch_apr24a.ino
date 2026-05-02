@@ -1,7 +1,9 @@
 #include <WiFi.h>
 #include <WebServer.h>
 
+// =======================
 // WIFI
+// =======================
 const char* ssid = "SFR_1F50";
 const char* password = "pus28urzq7fwj94uxpp9";
 
@@ -45,45 +47,48 @@ const int debounceDelay = 300;
 // IMPULSION RELAIS
 // =======================
 void pulseRelay(int pin) {
+  Serial.print("Trigger relais pin ");
+  Serial.println(pin);
+
   digitalWrite(pin, HIGH);
-  delay(500); // impulsion
+  delay(500);
   digitalWrite(pin, LOW);
 }
 
 // =======================
-// ACTIONS CENTRALISÉES
+// ACTIONS
 // =======================
-void triggerPortail() {
-  pulseRelay(RELAIS_PORTAIL);
-}
-
-void triggerPortillon() {
-  pulseRelay(RELAIS_PORTILLON);
-}
-
-void triggerGarage() {
-  pulseRelay(RELAIS_GARAGE);
-}
+void triggerPortail() { pulseRelay(RELAIS_PORTAIL); }
+void triggerPortillon() { pulseRelay(RELAIS_PORTILLON); }
+void triggerGarage() { pulseRelay(RELAIS_GARAGE); }
 
 // =======================
-// HTTP ROUTES
+// ROUTES HTTP (CORS OK)
 // =======================
+void sendCORS() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "*");
+}
+
 void handlePortail() {
   triggerPortail();
+  sendCORS();
   server.send(200, "text/plain", "OK");
 }
 
 void handlePortillon() {
   triggerPortillon();
+  sendCORS();
   server.send(200, "text/plain", "OK");
 }
 
 void handleGarage() {
   triggerGarage();
+  sendCORS();
   server.send(200, "text/plain", "OK");
 }
 
-// FORMAT : 1,0,1
 void handleStatus() {
   int portail = digitalRead(CAPTEUR_PORTAIL);
   int portillon = digitalRead(CAPTEUR_PORTILLON);
@@ -93,14 +98,26 @@ void handleStatus() {
                   String(portillon) + "," +
                   String(garage);
 
+  Serial.print("STATUS: ");
+  Serial.println(status);
+
+  sendCORS();
   server.send(200, "text/plain", status);
 }
 
 // =======================
-// GESTION BOUTON
+// OPTIONS (important CORS)
+// =======================
+void handleOptions() {
+  sendCORS();
+  server.send(200);
+}
+
+// =======================
+// BOUTONS
 // =======================
 bool checkButton(int pin, int index) {
-  if (digitalRead(pin) == LOW) { // appui
+  if (digitalRead(pin) == LOW) {
     if (millis() - lastPress[index] > debounceDelay) {
       lastPress[index] = millis();
       return true;
@@ -114,6 +131,7 @@ bool checkButton(int pin, int index) {
 // =======================
 void setup() {
   Serial.begin(115200);
+  Serial.println("ESP32 DEMARRAGE");
 
   // RELAIS
   pinMode(RELAIS_PORTAIL, OUTPUT);
@@ -129,7 +147,7 @@ void setup() {
   pinMode(CAPTEUR_PORTILLON, INPUT);
   pinMode(CAPTEUR_GARAGE, INPUT);
 
-  // BOUTONS (INPUT_PULLUP)
+  // BOUTONS
   pinMode(BTN_PORTAIL_LOCAL, INPUT_PULLUP);
   pinMode(BTN_PORTILLON_LOCAL, INPUT_PULLUP);
   pinMode(BTN_GARAGE_LOCAL, INPUT_PULLUP);
@@ -141,7 +159,7 @@ void setup() {
   // WIFI
   WiFi.begin(ssid, password);
 
-  Serial.print("Connexion WiFi...");
+  Serial.print("Connexion WiFi");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
@@ -157,6 +175,9 @@ void setup() {
   server.on("/garage", handleGarage);
   server.on("/status", handleStatus);
 
+  // CORS preflight
+  server.onNotFound(handleOptions);
+
   server.begin();
   Serial.println("Serveur HTTP démarré");
 }
@@ -167,19 +188,16 @@ void setup() {
 void loop() {
   server.handleClient();
 
-  // PORTAIL
   if (checkButton(BTN_PORTAIL_LOCAL, 0) ||
       checkButton(BTN_PORTAIL_DIST, 1)) {
     triggerPortail();
   }
 
-  // PORTILLON
   if (checkButton(BTN_PORTILLON_LOCAL, 2) ||
       checkButton(BTN_PORTILLON_DIST, 3)) {
     triggerPortillon();
   }
 
-  // GARAGE
   if (checkButton(BTN_GARAGE_LOCAL, 4) ||
       checkButton(BTN_GARAGE_DIST, 5)) {
     triggerGarage();

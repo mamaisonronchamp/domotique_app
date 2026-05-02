@@ -1,33 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   runApp(const MyApp());
-}
-
-// 🔐 AUTH SERVICE
-class AuthService {
-  static const _storage = FlutterSecureStorage();
-
-  static Future<void> saveCredentials(String user, String pass) async {
-    await _storage.write(key: "user", value: user);
-    await _storage.write(key: "pass", value: pass);
-  }
-
-  static Future<String?> getAuthHeader() async {
-    final user = await _storage.read(key: "user");
-    final pass = await _storage.read(key: "pass");
-
-    if (user == null || pass == null) return null;
-
-    final credentials = base64Encode(utf8.encode("$user:$pass"));
-    return "Basic $credentials";
-  }
 }
 
 class MyApp extends StatelessWidget {
@@ -51,7 +29,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final String localIP = "http://192.168.1.50";
+  final String localIP = "http://192.168.1.79";
   final String externalIP = "http://mamaisonronchamp.ddns.net:7941";
 
   bool portailFerme = true;
@@ -71,11 +49,9 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
 
-    AuthService.saveCredentials("Mamaison", "Mamaison70250*");
-
     getStatus();
 
-    Timer.periodic(const Duration(seconds: 2), (_) {
+    Timer.periodic(const Duration(seconds: 3), (_) {
       getStatus();
     });
   }
@@ -86,31 +62,94 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  Future<String> getBaseUrl() async {
-    final auth = await AuthService.getAuthHeader();
-
+  // 🔥 AUTO SWITCH WIFI / 4G
+  Future<String> getWorkingUrl() async {
     try {
       final res = await http
-          .get(
-            Uri.parse("$localIP/status"),
-            headers: {"Authorization": auth ?? ""},
-          )
-          .timeout(const Duration(milliseconds: 500));
+          .get(Uri.parse("$localIP/status"))
+          .timeout(const Duration(seconds: 1));
 
-      if (res.statusCode == 200) return localIP;
+      if (res.statusCode == 200) {
+        print("👉 LOCAL OK");
+        return localIP;
+      }
     } catch (_) {}
 
+    print("👉 EXTERNE OK");
     return externalIP;
   }
 
+  // 🚀 ENVOI COMMANDE
+  Future<void> sendCommand(String cmd) async {
+    final url = await getWorkingUrl();
+
+    try {
+      final res = await http
+          .get(Uri.parse("$url/$cmd"))
+          .timeout(const Duration(seconds: 5));
+
+      print("CMD => ${res.body}");
+
+      setState(() {
+        lastActionMessage = "Commande \"$cmd\" envoyée";
+        isConnected = true;
+      });
+
+      triggerBlink(cmd);
+
+      actionTimer?.cancel();
+      actionTimer = Timer(const Duration(seconds: 10), () {
+        setState(() => lastActionMessage = "Aucune action");
+      });
+
+    } catch (e) {
+      print("ERREUR CMD => $e");
+
+      setState(() {
+        lastActionMessage = "Erreur réseau";
+        isConnected = false;
+      });
+    }
+  }
+
+  // 📡 STATUS
+  Future<void> getStatus() async {
+    final url = await getWorkingUrl();
+
+    try {
+      final res = await http
+          .get(Uri.parse("$url/status"))
+          .timeout(const Duration(seconds: 5));
+
+      print("STATUS => ${res.body}");
+
+      final data = res.body.split(",");
+
+      if (data.length == 3) {
+        setState(() {
+          portailFerme = data[0] == "1";
+          portillonFerme = data[1] == "1";
+          garageFerme = data[2] == "1";
+          isConnected = true;
+        });
+      }
+    } catch (e) {
+      print("ERREUR STATUS => $e");
+
+      setState(() {
+        isConnected = false;
+      });
+    }
+  }
+
+  // 🔥 BLINK
   void triggerBlink(String cmd) {
     int count = 0;
-    int maxCount = 20; // fallback
+    int maxCount = 20;
 
-    // 🔥 Durée personnalisée
-    if (cmd == "portail") maxCount = 50;     // 25 sec
-    if (cmd == "portillon") maxCount = 10;   // 5 sec
-    if (cmd == "garage") maxCount = 34;      // 17 sec
+    if (cmd == "portail") maxCount = 50;
+    if (cmd == "portillon") maxCount = 10;
+    if (cmd == "garage") maxCount = 34;
 
     Timer.periodic(const Duration(milliseconds: 500), (timer) {
       setState(() {
@@ -130,60 +169,6 @@ class _HomePageState extends State<HomePage> {
         });
       }
     });
-  }
-
-  Future<void> sendCommand(String cmd) async {
-    final baseUrl = await getBaseUrl();
-    final auth = await AuthService.getAuthHeader();
-
-    try {
-      await http.get(
-        Uri.parse("$baseUrl/$cmd"),
-        headers: {"Authorization": auth ?? ""},
-      );
-
-      setState(() {
-        lastActionMessage = "Commande \"$cmd\" envoyée";
-        isConnected = true;
-      });
-
-      actionTimer?.cancel();
-      actionTimer = Timer(const Duration(seconds: 10), () {
-        setState(() => lastActionMessage = "Aucune action");
-      });
-
-      triggerBlink(cmd);
-    } catch (_) {
-      setState(() {
-        lastActionMessage = "Erreur réseau";
-        isConnected = false;
-      });
-    }
-  }
-
-  Future<void> getStatus() async {
-    final baseUrl = await getBaseUrl();
-    final auth = await AuthService.getAuthHeader();
-
-    try {
-      final res = await http.get(
-        Uri.parse("$baseUrl/status"),
-        headers: {"Authorization": auth ?? ""},
-      );
-
-      final data = res.body.split(",");
-
-      setState(() {
-        portailFerme = data[0] == "1";
-        portillonFerme = data[1] == "1";
-        garageFerme = data[2] == "1";
-        isConnected = true;
-      });
-    } catch (_) {
-      setState(() {
-        isConnected = false;
-      });
-    }
   }
 
   Widget statusBar() {
@@ -215,125 +200,109 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 🔴 TOUT TON CODE EST IDENTIQUE
-// ✅ SEULE LA PARTIE card() A ÉTÉ MODIFIÉE
-
-Widget card(
-  String title,
-  bool isOpen,
-  String subtitle,
-  String imagePath,
-  Color color,
-  String cmd,
-  bool blink,
-  String label,
-) {
-  return Container(
-    margin: const EdgeInsets.only(bottom: 20),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(30),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-        child: Container(
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(30),
-            gradient: LinearGradient(
-              colors: [
-                color.withOpacity(0.35),
-                Colors.black.withOpacity(0.5),
-              ],
-            ),
-            border: Border.all(color: color.withOpacity(0.6)),
-          ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  TweenAnimationBuilder<double>(
-                   tween: Tween<double>(
-                    begin: 1.0,
-                    end: blink ? 0.2 : 1.0,
-                  ),
-                  duration: const Duration(milliseconds: 500),
-                  builder: (context, value, child) {
-                    return Opacity(opacity: value, child: child);
-                  },
-                    child: Container(
-                      width: 150,
-                      height: 110,
-                      alignment: Alignment.center,
-                      child: Transform.scale(
-                        scaleX: 1.3,
-                        child: Image.asset(imagePath),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 20),
-
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-
-                      // 🔐 TITRE AVEC CADENAS
-                      Row(
-                        children: [
-                          Icon(
-                            isOpen
-                                ? Icons.lock_open
-                                : Icons.lock,
-                            color: Colors.white,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(title,
-                              style:
-                                  const TextStyle(fontSize: 22)),
-                        ],
-                      ),
-
-                      const SizedBox(height: 6),
-
-                      // 🟢 ÉTAT AVEC PASTILLE
-                      Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: isOpen
-                                  ? Colors.green
-                                  : Colors.orangeAccent,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(isOpen ? "Ouvert" : "Fermé"),
-                        ],
-                      ),
-
-                      Text(subtitle,
-                          style: const TextStyle(
-                              color: Colors.white54)),
-                    ],
-                  )
+  Widget card(
+    String title,
+    bool isOpen,
+    String subtitle,
+    String imagePath,
+    Color color,
+    String cmd,
+    bool blink,
+    String label,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(30),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(30),
+              gradient: LinearGradient(
+                colors: [
+                  color.withOpacity(0.35),
+                  Colors.black.withOpacity(0.5),
                 ],
               ),
-
-              const SizedBox(height: 25),
-
-              // 🔘 TON BOUTON ORIGINAL (inchangé)
-              AnimatedButton(
-                onTap: () => sendCommand(cmd),
-                color: color,
-                label: label,
-              ),
-            ],
+              border: Border.all(color: color.withOpacity(0.6)),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    TweenAnimationBuilder<double>(
+                      tween: Tween<double>(
+                        begin: 1.0,
+                        end: blink ? 0.2 : 1.0,
+                      ),
+                      duration: const Duration(milliseconds: 500),
+                      builder: (context, value, child) {
+                        return Opacity(opacity: value, child: child);
+                      },
+                      child: Container(
+                        width: 150,
+                        height: 110,
+                        alignment: Alignment.center,
+                        child: Transform.scale(
+                          scaleX: 1.3,
+                          child: Image.asset(imagePath),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              isOpen ? Icons.lock_open : Icons.lock,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(title,
+                                style: const TextStyle(fontSize: 22)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: isOpen
+                                    ? Colors.green
+                                    : Colors.orangeAccent,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(isOpen ? "Ouvert" : "Fermé"),
+                          ],
+                        ),
+                        Text(subtitle,
+                            style:
+                                const TextStyle(color: Colors.white54)),
+                      ],
+                    )
+                  ],
+                ),
+                const SizedBox(height: 25),
+                AnimatedButton(
+                  onTap: () => sendCommand(cmd),
+                  color: color,
+                  label: label,
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -374,7 +343,7 @@ Widget card(
   }
 }
 
-// 🔥 SLIDER FIX FINAL
+// 🔥 SLIDER
 class AnimatedButton extends StatefulWidget {
   final VoidCallback onTap;
   final Color color;
@@ -422,10 +391,8 @@ class _AnimatedButtonState extends State<AnimatedButton> {
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
               child: validated
-                  ? const Icon(Icons.check,
-                      color: Colors.white, key: ValueKey("check"))
+                  ? const Icon(Icons.check, color: Colors.white)
                   : Text(widget.label,
-                      key: const ValueKey("text"),
                       style: const TextStyle(
                           fontSize: 16, fontWeight: FontWeight.bold)),
             ),
@@ -436,7 +403,6 @@ class _AnimatedButtonState extends State<AnimatedButton> {
             child: GestureDetector(
               onHorizontalDragUpdate: (details) {
                 if (validated) return;
-
                 setState(() {
                   position += details.delta.dx;
                   position = position.clamp(0, maxWidth);
@@ -451,7 +417,6 @@ class _AnimatedButtonState extends State<AnimatedButton> {
 
                   widget.onTap();
                   HapticFeedback.mediumImpact();
-
                   reset();
                 } else {
                   setState(() => position = 0);

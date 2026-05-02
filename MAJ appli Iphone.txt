@@ -1,0 +1,15 @@
+-cmd:
+
+cd desktop\domotique_app
+
+flutter build web --base-href /domotique_app/
+
+xcopy build\web\* docs\ /E /I /Y
+
+-Git Bash (En 1 bloc):
+
+git add .
+git commit -m "update app"
+git push
+
+-Raffraichir la page
