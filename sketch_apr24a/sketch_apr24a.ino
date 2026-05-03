@@ -24,27 +24,22 @@ WebServer server(80);
 #define CAPTEUR_GARAGE 32
 
 // =======================
-// BOUTONS LOCAUX
+// BOUTONS
 // =======================
 #define BTN_PORTAIL_LOCAL 18
 #define BTN_PORTILLON_LOCAL 19
 #define BTN_GARAGE_LOCAL 5
 
-// =======================
-// BOUTONS DISTANTS
-// =======================
 #define BTN_PORTAIL_DIST 17
 #define BTN_PORTILLON_DIST 16
 #define BTN_GARAGE_DIST 4
 
 // =======================
-// ANTI-REBOND
-// =======================
 unsigned long lastPress[6] = {0,0,0,0,0,0};
 const int debounceDelay = 300;
 
 // =======================
-// IMPULSION RELAIS
+// RELAIS
 // =======================
 void pulseRelay(int pin) {
   Serial.print("Trigger relais pin ");
@@ -55,15 +50,12 @@ void pulseRelay(int pin) {
   digitalWrite(pin, LOW);
 }
 
-// =======================
-// ACTIONS
-// =======================
 void triggerPortail() { pulseRelay(RELAIS_PORTAIL); }
 void triggerPortillon() { pulseRelay(RELAIS_PORTILLON); }
 void triggerGarage() { pulseRelay(RELAIS_GARAGE); }
 
 // =======================
-// ROUTES HTTP (CORS OK)
+// CORS GLOBAL
 // =======================
 void sendCORS() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
@@ -71,25 +63,30 @@ void sendCORS() {
   server.sendHeader("Access-Control-Allow-Headers", "*");
 }
 
+// =======================
+// ROUTES
+// =======================
 void handlePortail() {
-  triggerPortail();
   sendCORS();
+  triggerPortail();
   server.send(200, "text/plain", "OK");
 }
 
 void handlePortillon() {
-  triggerPortillon();
   sendCORS();
+  triggerPortillon();
   server.send(200, "text/plain", "OK");
 }
 
 void handleGarage() {
-  triggerGarage();
   sendCORS();
+  triggerGarage();
   server.send(200, "text/plain", "OK");
 }
 
 void handleStatus() {
+  sendCORS();
+
   int portail = digitalRead(CAPTEUR_PORTAIL);
   int portillon = digitalRead(CAPTEUR_PORTILLON);
   int garage = digitalRead(CAPTEUR_GARAGE);
@@ -101,16 +98,15 @@ void handleStatus() {
   Serial.print("STATUS: ");
   Serial.println(status);
 
-  sendCORS();
   server.send(200, "text/plain", status);
 }
 
 // =======================
-// OPTIONS (important CORS)
+// OPTIONS (CRUCIAL POUR WEB)
 // =======================
 void handleOptions() {
   sendCORS();
-  server.send(200);
+  server.send(204); // pas 200 → mieux pour preflight
 }
 
 // =======================
@@ -133,7 +129,6 @@ void setup() {
   Serial.begin(115200);
   Serial.println("ESP32 DEMARRAGE");
 
-  // RELAIS
   pinMode(RELAIS_PORTAIL, OUTPUT);
   pinMode(RELAIS_PORTILLON, OUTPUT);
   pinMode(RELAIS_GARAGE, OUTPUT);
@@ -142,12 +137,10 @@ void setup() {
   digitalWrite(RELAIS_PORTILLON, LOW);
   digitalWrite(RELAIS_GARAGE, LOW);
 
-  // CAPTEURS
   pinMode(CAPTEUR_PORTAIL, INPUT);
   pinMode(CAPTEUR_PORTILLON, INPUT);
   pinMode(CAPTEUR_GARAGE, INPUT);
 
-  // BOUTONS
   pinMode(BTN_PORTAIL_LOCAL, INPUT_PULLUP);
   pinMode(BTN_PORTILLON_LOCAL, INPUT_PULLUP);
   pinMode(BTN_GARAGE_LOCAL, INPUT_PULLUP);
@@ -156,7 +149,6 @@ void setup() {
   pinMode(BTN_PORTILLON_DIST, INPUT_PULLUP);
   pinMode(BTN_GARAGE_DIST, INPUT_PULLUP);
 
-  // WIFI
   WiFi.begin(ssid, password);
 
   Serial.print("Connexion WiFi");
@@ -170,13 +162,16 @@ void setup() {
   Serial.println(WiFi.localIP());
 
   // ROUTES
-  server.on("/portail", handlePortail);
-  server.on("/portillon", handlePortillon);
-  server.on("/garage", handleGarage);
-  server.on("/status", handleStatus);
+  server.on("/portail", HTTP_GET, handlePortail);
+  server.on("/portillon", HTTP_GET, handlePortillon);
+  server.on("/garage", HTTP_GET, handleGarage);
+  server.on("/status", HTTP_GET, handleStatus);
 
-  // CORS preflight
-  server.onNotFound(handleOptions);
+  // 🔥 IMPORTANT → gestion OPTIONS propre
+  server.on("/portail", HTTP_OPTIONS, handleOptions);
+  server.on("/portillon", HTTP_OPTIONS, handleOptions);
+  server.on("/garage", HTTP_OPTIONS, handleOptions);
+  server.on("/status", HTTP_OPTIONS, handleOptions);
 
   server.begin();
   Serial.println("Serveur HTTP démarré");

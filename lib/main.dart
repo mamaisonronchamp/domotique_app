@@ -29,6 +29,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  final String baseUrl = "http://mamaisonronchamp.duckdns.org:7941";
   final String localIP = "http://192.168.1.79";
   final String externalIP = "http://mamaisonronchamp.ddns.net:7941";
 
