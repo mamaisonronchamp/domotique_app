@@ -2,6 +2,12 @@
 
 cd desktop\domotique_app
 
+flutter clean
+
+flutter pub get
+
+flutter build apk --release
+
 flutter build web --base-href /domotique_app/
 
 xcopy build\web\* docs\ /E /I /Y
