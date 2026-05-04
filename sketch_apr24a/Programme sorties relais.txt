@@ -10,33 +10,11 @@ const char* password = "pus28urzq7fwj94uxpp9";
 WebServer server(80);
 
 // =======================
-// 74HC595 (SORTIES)
+// 74HC595
 // =======================
 #define DATA_PIN 12
 #define CLOCK_PIN 23
 #define LATCH_PIN 22
-
-// =======================
-// 74HC165 (ENTREES)
-// =======================
-#define IN_LOAD  0
-#define IN_CLOCK 2
-#define IN_DATA  15
-
-// =======================
-// CAPTEURS
-// =======================
-#define CAPTEUR_PORTAIL   5
-#define CAPTEUR_PORTILLON 18
-#define CAPTEUR_GARAGE    19
-
-byte lastInputs = 0;
-
-// =======================
-// SECURITE BOOT
-// =======================
-unsigned long bootTime = 0;
-const unsigned long BOOT_DELAY = 5000;
 
 // =======================
 // ETAT SYSTEME
@@ -54,7 +32,14 @@ int pulseDuration = 0;
 bool pulsePhase = false;
 
 // =======================
-// 74HC595
+// ETAT (status API)
+// =======================
+int portail = 0;
+int portillon = 0;
+int garage = 0;
+
+// =======================
+// SHIFT REGISTER
 // =======================
 void writeByte(byte data) {
   digitalWrite(LATCH_PIN, LOW);
@@ -68,59 +53,26 @@ void writeByte(byte data) {
   digitalWrite(LATCH_PIN, HIGH);
 }
 
+// =======================
+// CLEAR TOTAL
+// =======================
 void clearAll() {
-  writeByte(0x00);
-  delayMicroseconds(50);
-  writeByte(0x00);
+  writeByte(0x00); // 🔥 garantit aucun relais actif
 }
 
 // =======================
-// 74HC165
-// =======================
-byte readInputs165() {
-
-  byte value = 0;
-
-  digitalWrite(IN_LOAD, LOW);
-  delayMicroseconds(5);
-  digitalWrite(IN_LOAD, HIGH);
-
-  for (int i = 0; i < 8; i++) {
-    value <<= 1;
-    value |= digitalRead(IN_DATA);
-
-    digitalWrite(IN_CLOCK, HIGH);
-    delayMicroseconds(5);
-    digitalWrite(IN_CLOCK, LOW);
-  }
-
-  return ~value;
-}
-
-// =======================
-// CAPTEURS
-// =======================
-int readCapteur(int pin) {
-  return !digitalRead(pin);
-}
-
-// =======================
-// RELAIS
+// DUREE RELAIS
 // =======================
 int getPulseDuration(int relay) {
-  if (relay == 2) return 5000;             // portillon
+  if (relay == 2) return 5000;        // portillon
   if (relay == 1 || relay == 3) return 500; // portail + garage
-  if (relay == 4) return 500;              // 🔥 volets
   return 300;
 }
 
+// =======================
+// DEMARRAGE RELAIS
+// =======================
 void startRelay(int relay) {
-
-  if (millis() - bootTime < BOOT_DELAY) {
-    Serial.println("SECURITE BOOT ACTIVE");
-    return;
-  }
-
   if (busy) return;
 
   Serial.print("Start relais ");
@@ -139,17 +91,14 @@ void startRelay(int relay) {
 }
 
 // =======================
-// MACHINE RELAIS
+// MACHINE NON BLOQUANTE
 // =======================
 void updateRelay() {
-
-  if (!busy) {
-    writeByte(0x00);
-    return;
-  }
+  if (!busy) return;
 
   unsigned long now = millis();
 
+  // Phase impulsion longue
   if (pulsePhase) {
     if (now - pulseStartTime >= pulseDuration) {
       pulsePhase = false;
@@ -159,15 +108,14 @@ void updateRelay() {
     return;
   }
 
+  // Cadence rapide (~2ms)
   if (now - lastStepTime < 2) return;
   lastStepTime = now;
 
-  if (bitIndex == 7) {
-    writeByte(0x00); // 🔥 empêche relais 8 actif
-  } else {
-    writeByte(1 << bitIndex);
-  }
+  byte data = (1 << bitIndex);
+  writeByte(data);
 
+  // Déclenche impulsion
   if (bitIndex == currentRelay && cycle == 4) {
     pulsePhase = true;
     pulseStartTime = now;
@@ -181,7 +129,9 @@ void updateRelay() {
     cycle++;
 
     if (cycle >= 5) {
-      clearAll();
+      clearAll();          // 🔥 coupe tout proprement
+      writeByte(0x00);     // 🔥 sécurité anti latch
+
       busy = false;
       currentRelay = -1;
 
@@ -193,32 +143,19 @@ void updateRelay() {
 // =======================
 // ACTIONS
 // =======================
-void triggerPortail()   { startRelay(1); }
-void triggerPortillon() { startRelay(2); }
-void triggerGarage()    { startRelay(3); }
-void triggerVolets()    { startRelay(4); } // 🔥 NEW
+void triggerPortail() {
+  startRelay(1);
+  portail = !portail;
+}
 
-// =======================
-// INPUTS 74HC165
-// =======================
-void handleInputs() {
+void triggerPortillon() {
+  startRelay(2);
+  portillon = !portillon;
+}
 
-  byte state = readInputs165();
-
-  byte changed = state ^ lastInputs;
-  byte pressed = changed & state;
-
-  if (pressed & (1 << 0)) triggerPortail();
-  if (pressed & (1 << 1)) triggerPortillon();
-  if (pressed & (1 << 2)) triggerGarage();
-
-  if (pressed & (1 << 3)) triggerPortail();
-  if (pressed & (1 << 4)) triggerPortillon();
-  if (pressed & (1 << 5)) triggerGarage();
-
-  if (pressed & (1 << 6)) triggerVolets(); // 🔥 IN7
-
-  lastInputs = state;
+void triggerGarage() {
+  startRelay(3);
+  garage = !garage;
 }
 
 // =======================
@@ -251,18 +188,8 @@ void handleGarage() {
   server.send(200, "text/plain", "OK");
 }
 
-void handleVolets() {
-  triggerVolets();
-  sendCORS();
-  server.send(200, "text/plain", "OK");
-}
-
 void handleStatus() {
   sendCORS();
-
-  int portail = readCapteur(CAPTEUR_PORTAIL);
-  int portillon = readCapteur(CAPTEUR_PORTILLON);
-  int garage = readCapteur(CAPTEUR_GARAGE);
 
   String status = String(portail) + "," +
                   String(portillon) + "," +
@@ -281,32 +208,18 @@ void handleOptions() {
 // =======================
 void setup() {
   Serial.begin(115200);
+  Serial.println("ESP32 DEMARRAGE");
 
+  // 74HC595
   pinMode(DATA_PIN, OUTPUT);
   pinMode(CLOCK_PIN, OUTPUT);
   pinMode(LATCH_PIN, OUTPUT);
-
-  digitalWrite(DATA_PIN, LOW);
-  digitalWrite(CLOCK_PIN, LOW);
-  digitalWrite(LATCH_PIN, LOW);
-
   clearAll();
 
-  pinMode(IN_LOAD, OUTPUT);
-  pinMode(IN_CLOCK, OUTPUT);
-  pinMode(IN_DATA, INPUT);
-
-  digitalWrite(IN_LOAD, HIGH);
-  digitalWrite(IN_CLOCK, LOW);
-
-  pinMode(CAPTEUR_PORTAIL, INPUT_PULLUP);
-  pinMode(CAPTEUR_PORTILLON, INPUT_PULLUP);
-  pinMode(CAPTEUR_GARAGE, INPUT_PULLUP);
-
-  bootTime = millis();
-
+  // WIFI
   WiFi.begin(ssid, password);
 
+  Serial.print("Connexion WiFi");
   while (WiFi.status() != WL_CONNECTED) {
     delay(300);
     Serial.print(".");
@@ -315,33 +228,26 @@ void setup() {
   Serial.println("\nWiFi OK");
   Serial.println(WiFi.localIP());
 
-  server.on("/portail", handlePortail);
-  server.on("/portillon", handlePortillon);
-  server.on("/garage", handleGarage);
-  server.on("/volets", handleVolets); // 🔥 NEW
-  server.on("/status", handleStatus);
+  // ROUTES
+  server.on("/portail", HTTP_GET, handlePortail);
+  server.on("/portillon", HTTP_GET, handlePortillon);
+  server.on("/garage", HTTP_GET, handleGarage);
+  server.on("/status", HTTP_GET, handleStatus);
 
+  // CORS
   server.on("/portail", HTTP_OPTIONS, handleOptions);
   server.on("/portillon", HTTP_OPTIONS, handleOptions);
   server.on("/garage", HTTP_OPTIONS, handleOptions);
-  server.on("/volets", HTTP_OPTIONS, handleOptions);
   server.on("/status", HTTP_OPTIONS, handleOptions);
 
   server.begin();
+  Serial.println("Serveur HTTP démarré");
 }
 
 // =======================
 // LOOP
 // =======================
 void loop() {
-
   server.handleClient();
-
-  if (millis() - bootTime < BOOT_DELAY) {
-    writeByte(0x00);
-    return;
-  }
-
-  handleInputs();
-  updateRelay();
+  updateRelay(); // 🔥 coeur non bloquant
 }

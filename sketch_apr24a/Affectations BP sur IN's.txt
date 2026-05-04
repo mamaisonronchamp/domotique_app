@@ -1,0 +1,114 @@
+// =======================
+// CONFIG 74HC165
+// =======================
+#define PIN_LOAD  0   // SH/LD
+#define PIN_CLOCK 2   // CLK
+#define PIN_DATA  15  // Q7
+
+// =======================
+byte lastState = 0;
+
+// =======================
+// Lecture brute registre
+// =======================
+byte readShiftRegister() {
+
+  byte value = 0;
+
+  // Charger les entrées
+  digitalWrite(PIN_LOAD, LOW);
+  delayMicroseconds(5);
+  digitalWrite(PIN_LOAD, HIGH);
+
+  // Lire les 8 bits
+  for (int i = 0; i < 8; i++) {
+    value <<= 1;
+    value |= digitalRead(PIN_DATA);
+
+    digitalWrite(PIN_CLOCK, HIGH);
+    delayMicroseconds(5);
+    digitalWrite(PIN_CLOCK, LOW);
+  }
+
+  return value;
+}
+
+// =======================
+// Setup
+// =======================
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(PIN_LOAD, OUTPUT);
+  pinMode(PIN_CLOCK, OUTPUT);
+  pinMode(PIN_DATA, INPUT);
+
+  digitalWrite(PIN_LOAD, HIGH);
+  digitalWrite(PIN_CLOCK, LOW);
+
+  Serial.println("=== SYSTEME ENTREES 74HC165 ===");
+}
+
+// =======================
+// Loop
+// =======================
+void loop() {
+
+  // Lecture + inversion logique
+  byte state = ~readShiftRegister();
+
+  // Détection changements
+  byte changed = state ^ lastState;
+
+  // Détection appui (front montant)
+  byte pressed = changed & state;
+
+  // Si changement
+  if (changed) {
+
+    Serial.print("Etat : ");
+    Serial.println(state, BIN);
+
+    // =======================
+    // BOUTONS LOCAUX
+    // =======================
+    if (pressed & (1 << 0)) {
+      Serial.println("BP LOCAL PORTAIL");
+      // triggerPortail();
+    }
+
+    if (pressed & (1 << 1)) {
+      Serial.println("BP LOCAL PORTILLON");
+      // triggerPortillon();
+    }
+
+    if (pressed & (1 << 2)) {
+      Serial.println("BP LOCAL GARAGE");
+      // triggerGarage();
+    }
+
+    // =======================
+    // BOUTONS DISTANTS
+    // =======================
+    if (pressed & (1 << 3)) {
+      Serial.println("BP DISTANT PORTAIL");
+      // triggerPortail();
+    }
+
+    if (pressed & (1 << 4)) {
+      Serial.println("BP DISTANT PORTILLON");
+      // triggerPortillon();
+    }
+
+    if (pressed & (1 << 5)) {
+      Serial.println("BP DISTANT GARAGE");
+      // triggerGarage();
+    }
+
+    Serial.println("------------------");
+  }
+
+  lastState = state;
+
+  delay(20); // léger anti-rebond global
+}

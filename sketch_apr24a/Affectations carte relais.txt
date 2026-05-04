@@ -1,0 +1,23 @@
+Relais 1 = Cmd Portail
+Relais 2 = Cmd Portillon
+Relais 3 = Cmd Porte de garage
+
+IN1	= BP Ouv Portail DIST
+IN2	= BP Ouv Portillon DIST
+IN3	= BP Ouv Garage DIST
+IN4	= BP Ouv Portail LOCAL
+IN5	= BP Ouv Portillon LOCAL
+IN6	= BP Ouv Garage LOCAL
+IN7	=
+IN8	=
+
+GPIO	4 =
+GPIO	16 = INOPERATIONNEL
+GPIO	17 = INOPERATIONNEL
+GPIO	5 = Cpateur portail
+GPIO	18 = Capteur portillon
+GPIO	19 = Capteur garage
+
+
+
+

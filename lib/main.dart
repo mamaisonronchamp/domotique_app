@@ -29,7 +29,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final String baseUrl = "http://mamaisonronchamp.duckdns.org:7941";
   final String localIP = "http://192.168.1.79";
   final String externalIP = "http://mamaisonronchamp.ddns.net:7941";
 
@@ -40,6 +39,7 @@ class _HomePageState extends State<HomePage> {
   bool blinkPortail = false;
   bool blinkPortillon = false;
   bool blinkGarage = false;
+  bool blinkVolets = false;
 
   bool isConnected = false;
   String lastActionMessage = "Aucune action";
@@ -49,7 +49,6 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-
     getStatus();
 
     Timer.periodic(const Duration(seconds: 3), (_) {
@@ -63,7 +62,7 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  // 🔥 AUTO SWITCH WIFI / 4G
+  // AUTO SWITCH WIFI / 4G
   Future<String> getWorkingUrl() async {
     try {
       final res = await http
@@ -71,16 +70,14 @@ class _HomePageState extends State<HomePage> {
           .timeout(const Duration(seconds: 1));
 
       if (res.statusCode == 200) {
-        print("👉 LOCAL OK");
         return localIP;
       }
     } catch (_) {}
 
-    print("👉 EXTERNE OK");
     return externalIP;
   }
 
-  // 🚀 ENVOI COMMANDE
+  // ENVOI COMMANDE
   Future<void> sendCommand(String cmd) async {
     final url = await getWorkingUrl();
 
@@ -88,8 +85,6 @@ class _HomePageState extends State<HomePage> {
       final res = await http
           .get(Uri.parse("$url/$cmd"))
           .timeout(const Duration(seconds: 5));
-
-      print("CMD => ${res.body}");
 
       setState(() {
         lastActionMessage = "Commande \"$cmd\" envoyée";
@@ -104,8 +99,6 @@ class _HomePageState extends State<HomePage> {
       });
 
     } catch (e) {
-      print("ERREUR CMD => $e");
-
       setState(() {
         lastActionMessage = "Erreur réseau";
         isConnected = false;
@@ -113,7 +106,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 📡 STATUS
+  // STATUS
   Future<void> getStatus() async {
     final url = await getWorkingUrl();
 
@@ -121,8 +114,6 @@ class _HomePageState extends State<HomePage> {
       final res = await http
           .get(Uri.parse("$url/status"))
           .timeout(const Duration(seconds: 5));
-
-      print("STATUS => ${res.body}");
 
       final data = res.body.split(",");
 
@@ -135,15 +126,13 @@ class _HomePageState extends State<HomePage> {
         });
       }
     } catch (e) {
-      print("ERREUR STATUS => $e");
-
       setState(() {
         isConnected = false;
       });
     }
   }
 
-  // 🔥 BLINK
+  // BLINK
   void triggerBlink(String cmd) {
     int count = 0;
     int maxCount = 20;
@@ -151,12 +140,14 @@ class _HomePageState extends State<HomePage> {
     if (cmd == "portail") maxCount = 50;
     if (cmd == "portillon") maxCount = 10;
     if (cmd == "garage") maxCount = 34;
+    if (cmd == "volets") maxCount = 20;
 
     Timer.periodic(const Duration(milliseconds: 500), (timer) {
       setState(() {
         if (cmd == "portail") blinkPortail = !blinkPortail;
         if (cmd == "portillon") blinkPortillon = !blinkPortillon;
         if (cmd == "garage") blinkGarage = !blinkGarage;
+        if (cmd == "volets") blinkVolets = !blinkVolets;
       });
 
       count++;
@@ -167,6 +158,7 @@ class _HomePageState extends State<HomePage> {
           blinkPortail = false;
           blinkPortillon = false;
           blinkGarage = false;
+          blinkVolets = false;
         });
       }
     });
@@ -211,6 +203,8 @@ class _HomePageState extends State<HomePage> {
     bool blink,
     String label,
   ) {
+    final bool isVolets = title == "Volets";
+
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       child: ClipRRect(
@@ -259,7 +253,11 @@ class _HomePageState extends State<HomePage> {
                         Row(
                           children: [
                             Icon(
-                              isOpen ? Icons.lock_open : Icons.lock,
+                              isVolets
+                                  ? Icons.blinds
+                                  : (isOpen
+                                      ? Icons.lock_open
+                                      : Icons.lock),
                               color: Colors.white,
                             ),
                             const SizedBox(width: 8),
@@ -268,22 +266,26 @@ class _HomePageState extends State<HomePage> {
                           ],
                         ),
                         const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: isOpen
-                                    ? Colors.green
-                                    : Colors.orangeAccent,
-                                shape: BoxShape.circle,
+
+                        // 🔥 PAS DE TEXTE POUR VOLETS
+                        if (!isVolets)
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: isOpen
+                                      ? Colors.green
+                                      : Colors.orangeAccent,
+                                  shape: BoxShape.circle,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(isOpen ? "Ouvert" : "Fermé"),
-                          ],
-                        ),
+                              const SizedBox(width: 6),
+                              Text(isOpen ? "Ouvert" : "Fermé"),
+                            ],
+                          ),
+
                         Text(subtitle,
                             style:
                                 const TextStyle(color: Colors.white54)),
@@ -326,12 +328,19 @@ class _HomePageState extends State<HomePage> {
                       card("Portail", !portailFerme, "Accès principal",
                           "assets/icons/portail.png",
                           Colors.greenAccent, "portail", blinkPortail, "Ouvrir / Fermer"),
+
                       card("Portillon", !portillonFerme, "Accès piéton",
                           "assets/icons/portillon.png",
                           Colors.orangeAccent, "portillon", blinkPortillon, "Ouvrir"),
+
                       card("Garage", !garageFerme, "Garage",
                           "assets/icons/garage.png",
                           Colors.blueAccent, "garage", blinkGarage, "Ouvrir / Fermer"),
+
+                      // VOLETS
+                      card("Volets", true, "Maison",
+                          "assets/icons/volets.png",
+                          Colors.purpleAccent, "volets", blinkVolets, "Ouvrir / Fermer"),
                     ],
                   ),
                 )
@@ -344,7 +353,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// 🔥 SLIDER
+// SLIDER
 class AnimatedButton extends StatefulWidget {
   final VoidCallback onTap;
   final Color color;
